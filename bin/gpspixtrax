@@ -33,7 +33,9 @@ from gpspixtrax import exiftool
 
 imagedata = exiftool.fetchdata(sys.argv[1:])
 
-gpspixtrax.parsetime(imagedata)
-gpspixtrax.pass2(imagedata)
-gpspixtrax.pass3(imagedata)
+
+gpspixtrax.GPSPixTrax(imagedata)
+gpspixtrax.parsetime()
+gpspixtrax.pass2()
+gpspixtrax.pass3()
 import epdb;epdb.st()

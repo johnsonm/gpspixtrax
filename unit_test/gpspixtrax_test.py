@@ -32,11 +32,12 @@ class Test_gpspixtrax(unittest.TestCase):
             '-d', '-c', directory + '/data/selectdata.json.xz')
         filelist = mock.Mock()
         imagedata = exiftool.fetchdata(filelist)
+        G = gpspixtrax.GPSPixTrax(imagedata)
         for tag in ('gpstime', 'localtime', 'pseudolocaltime', 'tzoffset', 'tzseconds'):
             self.assertEqual(set(tag in i for i in imagedata), set((False,)))
         I.assert_called_once_with(filelist)
 
-        gpspixtrax.parsetime(imagedata)
+        G.parsetime()
         for slice in imagedata:
             for tag in ('gpstime', 'localtime', 'pseudolocaltime'):
                 self.assertEqual(set(tag in i for i in slice), set((True,)))
@@ -48,8 +49,8 @@ class Test_gpspixtrax(unittest.TestCase):
                     set(tag in i for i in slice if i.GPSStatus == 'V'),
                     set((False,)))
 
-        gpspixtrax.pass2(imagedata)
-        gpspixtrax.pass3(imagedata)
+        G.pass2()
+        G.pass3()
 
     @mock.patch('gpspixtrax.exiftool.invoke_exiftool')
     def test_parse_end_inactive(self, I):
@@ -58,12 +59,13 @@ class Test_gpspixtrax(unittest.TestCase):
             '-d', '-c', directory + '/data/initialoffset.json.xz')
         filelist = mock.Mock()
         imagedata = exiftool.fetchdata(filelist)
-        gpspixtrax.parsetime(imagedata)
+        G = gpspixtrax.GPSPixTrax(imagedata)
+        G.parsetime()
         for tag in ('tzoffset', 'tzseconds'):
             # one has tz info, the others do not
             self.assertEqual(set(tag in i for i in imagedata[0]),
                              set((False, True)))
-        gpspixtrax.pass2(imagedata)
+        G.pass2()
         for tag in ('tzoffset', 'tzseconds'):
             # tz info has been copied from the one known good image
             self.assertEqual(set(tag in i for i in imagedata[0]), set((True,)))
@@ -75,15 +77,16 @@ class Test_gpspixtrax(unittest.TestCase):
             '-d', '-c', directory + '/data/nooffset.json.xz')
         filelist = mock.Mock()
         imagedata = exiftool.fetchdata(filelist)
-        gpspixtrax.parsetime(imagedata)
+        G = gpspixtrax.GPSPixTrax(imagedata)
+        G.parsetime()
         for tag in ('tzoffset', 'tzseconds'):
             # no valid GPS stamps, so nothing to trust yet
             self.assertEqual(set(tag in i for i in imagedata[0]), set((False,)))
-        gpspixtrax.pass2(imagedata)
+        G.pass2()
         for tag in ('tzoffset', 'tzseconds'):
             # no valid GPS stamps to copy, so nothing to trust yet
             self.assertEqual(set(tag in i for i in imagedata[0]), set((False,)))
-        gpspixtrax.pass3(imagedata)
+        G.pass3()
         for tag in ('tzoffset', 'tzseconds'):
             # now that we know no valid GPS stamps nearby, just guess
             self.assertEqual(set(tag in i for i in imagedata[0]), set((True,)))
@@ -95,17 +98,18 @@ class Test_gpspixtrax(unittest.TestCase):
             '-d', '-c', directory + '/data/farapart.json.xz')
         filelist = mock.Mock()
         imagedata = exiftool.fetchdata(filelist)
-        gpspixtrax.parsetime(imagedata)
+        G = gpspixtrax.GPSPixTrax(imagedata)
+        G.parsetime()
         for tag in ('tzoffset', 'tzseconds'):
             # one has tz info, the others do not
             self.assertEqual(set(tag in i for i in imagedata[0]),
                              set((False, True)))
-        gpspixtrax.pass2(imagedata)
+        G.pass2()
         for tag in ('tzoffset', 'tzseconds'):
             # GPS stamp too far away to trust
             self.assertEqual(set(tag in i for i in imagedata[0]),
                              set((False, True)))
-        gpspixtrax.pass3(imagedata)
+        G.pass3()
         for tag in ('tzoffset', 'tzseconds'):
             # localtime and gps time close enough together to guess
             self.assertEqual(set(tag in i for i in imagedata[0]), set((True,)))
@@ -117,23 +121,25 @@ class Test_gpspixtrax(unittest.TestCase):
             '-d', '-c', directory + '/data/disjointclockinvalid.json.xz')
         filelist = mock.Mock()
         imagedata = exiftool.fetchdata(filelist)
-        gpspixtrax.parsetime(imagedata)
+        G = gpspixtrax.GPSPixTrax(imagedata)
+        G.parsetime()
         for tag in ('tzoffset', 'tzseconds'):
             self.assertEqual(tag in imagedata[0][0], False)
-        gpspixtrax.pass2(imagedata)
+        G.pass2()
         for tag in ('tzoffset', 'tzseconds'):
             self.assertEqual(tag in imagedata[0][0], False)
-        gpspixtrax.pass3(imagedata)
+        G.pass3()
         for tag in ('tzoffset', 'tzseconds'):
             # localtime and gps time not close enough together to guess
             self.assertEqual(tag in imagedata[0][0], False)
 
-    @mock.patch('gpspixtrax.gpspixtrax.parsetime')
-    @mock.patch('gpspixtrax.gpspixtrax.pass2')
-    @mock.patch('gpspixtrax.gpspixtrax.pass3')
+    @mock.patch('gpspixtrax.gpspixtrax.GPSPixTrax.parsetime')
+    @mock.patch('gpspixtrax.gpspixtrax.GPSPixTrax.pass2')
+    @mock.patch('gpspixtrax.gpspixtrax.GPSPixTrax.pass3')
     def test_parse(self, P3, P2, T):
         imagedata = mock.Mock()
-        gpspixtrax.parse(imagedata)
-        T.assert_called_once_with(imagedata)
-        P2.assert_called_once_with(imagedata)
-        P3.assert_called_once_with(imagedata)
+        G = gpspixtrax.GPSPixTrax(imagedata)
+        G.parse()
+        T.assert_called_once_with()
+        P2.assert_called_once_with()
+        P3.assert_called_once_with()
