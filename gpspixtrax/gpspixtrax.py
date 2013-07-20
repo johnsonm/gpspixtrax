@@ -67,12 +67,12 @@ class GPSPixTrax(object):
                          math.cos(lat) * math.sin(dR) * math.cos(bearing))
         dlon = lon + math.atan2(math.sin(bearing) * math.sin(dR) * math.cos(lat),
                                 math.cos(dR) - math.sin(lat) * math.sin(dlat))
-        return (dlat, dlon)
+        return (math.degrees(dlat), math.degrees(dlon))
 
     @staticmethod
     def total_seconds(delta):
         # preserves sign
-        return delta.seconds + delta.days * 24 * 3600
+        return (delta.microseconds * 0.000001) + delta.seconds + delta.days * 24 * 3600
 
     @staticmethod
     def iso8601(datestring):
@@ -81,14 +81,14 @@ class GPSPixTrax(object):
 
     def round_offset(self, image):
         offset = image.gpstime - image.pseudolocaltime
-        offset = self.total_seconds(offset)
+        offset = int(self.total_seconds(offset))
         # find closest 30-minute offset and assume it is correct
-        image['tzoffset'] = int(offset / 1800.0) * 0.5
+        image['tzoffset'] = int(round(offset / 1800.0) * 0.5)
         image['tzseconds'] = int(image.tzoffset * 3600)
 
     def match_offset(self, notzImage, image, range):
         offset = notzImage.localtime - image.localtime
-        if abs(self.total_seconds(offset)) <= range:
+        if abs(int(self.total_seconds(offset))) <= range:
             notzImage['tzoffset'] = image.tzoffset
             notzImage['tzseconds'] = image.tzseconds
 
@@ -98,7 +98,7 @@ class GPSPixTrax(object):
         # 30-minute-off timestamps are relatively unusual; basically, do not
         # assume a 30-minute-off timestamp without at least one verified fix
         offset = image.gpstime - image.pseudolocaltime
-        offset = self.total_seconds(offset)
+        offset = int(self.total_seconds(offset))
         off = abs(offset)
         if off < range and (off + epsilon) % 3600 < epsilon * 2:
             image['tzoffset'] = int(offset / 3600.0)
@@ -120,6 +120,28 @@ class GPSPixTrax(object):
                     # good enough to pretend the naive camera time is GPS UTC, 
                     # calculate nearest offset
                     self.round_offset(image)
+
+    def imagecmp(self, first, second):
+        #     Return negative if x<y, zero if x==y, positive if x>y.
+        delta = self.total_seconds(first.gpstime-second.gpstime)
+        if delta > 0:
+            return 1
+        if delta < 0:
+            return -1
+
+        name1 = os.path.basename(first.SourceFile)
+        name2 = os.path.basename(second.SourceFile)
+        if name1[0:2] == name2[0:2]:
+            # use integer part only if they are in the same series
+            name1 = int(''.join(x for x in name1 if x.isdigit()))
+            name2 = int(''.join(x for x in name2 if x.isdigit()))
+            return name1-name2
+
+        return 0
+
+    def sortslices(self):
+        for slice in self.imagedata:
+            slice.sort(cmp=self.imagecmp)
 
     def pass2(self):
         missingOffset = []
@@ -164,16 +186,17 @@ class GPSPixTrax(object):
 
 
     def pass3(self):
+        missingGPS = []
+        lastAcq = None
         for i in range(len(self.imagedata)):
             for j in range(len(self.imagedata[i])):
                 image = self.imagedata[i][j]
 
                 if j == 0:
-                    last = image
-                    if image.GPSStatus == 'A':
-                        lastAcq = image
-                    else:
-                        lastAcq = ddict.ddict((key, 0.0) for key in image.keys())
+                    if image.GPSStatus == 'V':
+                        lastAcq = None
+                if image.GPSStatus == 'V' and lastAcq:
+                    missingGPS.append(image)
 
                 if not 'tzseconds' in image:
                     # this only happens if there were no verified fixes in the
@@ -181,11 +204,47 @@ class GPSPixTrax(object):
                     self.guess_offset(image, 300, 28800)
 
                 if 'tzseconds' in image:
-                    image['gpsStampAge'] = (
+                    image['gpsStampAge'] = int(
                         self.total_seconds(image.pseudolocaltime -
                                            image.gpstime) + image.tzseconds)
 
+                if image.GPSStatus == 'A':
+                    if lastAcq and missingGPS:
+                        interval = self.total_seconds(image.gpstime-lastAcq.gpstime)
+                        bearing = self.bearing(lastAcq.GPSLatitude, lastAcq.GPSLongitude,
+                                               image.GPSLatitude, image.GPSLongitude)
+                        distance = self.haversine(lastAcq.GPSLatitude, lastAcq.GPSLongitude,
+                                                  image.GPSLatitude, image.GPSLongitude)
+                        plat, plon = self.project(
+                            lastAcq.GPSLatitude, lastAcq.GPSLongitude, lastAcq.GPSTrack,
+                            interval * lastAcq.GPSSpeed)
+                        error = self.haversine(plat, plon, image.GPSLatitude, image.GPSLongitude)
+                        errorSpeed = error * (interval/3600.0)
+                        # assign locations to intermediate images in missingGPS
+                        # based on speed projection
+                        for fuzz in missingGPS:
+                            # need to use camera clock because GPS clock can stand still
+                            # when not at least trying to acquire
+                            fint = self.total_seconds(fuzz.localtime-lastAcq.localtime)
+                            fuzzdistance = (distance * (fint/interval))
+                            fuzz['fuzzdistance'] = fuzzdistance
+                            fuzz['errSpeed'] = errorSpeed
+                            fuzz['fuzzlat'], fuzz['fuzzlon'] = self.project(
+                                lastAcq.GPSLatitude, lastAcq.GPSLongitude,
+                                bearing, fuzzdistance)
+                            fuzz['fuzzbearing'] = bearing
+                            fuzz['projlat'], fuzz['projlon'] = self.project(
+                                lastAcq.GPSLatitude, lastAcq.GPSLongitude,
+                                lastAcq.GPSTrack, fint * lastAcq.GPSSpeed)
+                            fuzz['projerr'] = self.haversine(
+                                fuzz.projlat, fuzz.projlon,
+                                fuzz.fuzzlat, fuzz.fuzzlon)
+
+                    lastAcq = image
+                    missingGPS = []
+
     def parse(self):
         self.parsetime()
+        self.sortslices()
         self.pass2()
         self.pass3()
