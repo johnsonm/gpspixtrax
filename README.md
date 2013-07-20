@@ -11,7 +11,10 @@ and to remove location data from pictures without any reasonable
 confidence in their location.
 
 This project is an attempt to implement such semantics.  It is
-currently in early development form.  
+currently a mess of scripting I'm writing as I look through data
+to see whether there's anything useful to do here, or whether I
+ought to just drop all the invalid fixes because there is too much
+noise.
 
 It is written in Python, works on at least Python 2.6, requires
 python-plumbum, python-dateutil, and exiftool installed.  The test
