@@ -22,9 +22,10 @@ import ddict
 
 MODE = ddict.ddict((
     ('valid', 1),
-    ('gps', 2),
-    ('projected', 4),
-    ('interpolated', 8),
+    ('validated', 2),
+    ('gps', 4),
+    ('projected', 8),
+    ('interpolated', 16),
 ))
 
 class KMLPaths(object):
@@ -44,6 +45,8 @@ class KMLPaths(object):
         for image in self.slice:
             if image.GPSStatus == 'A':
                 match = gpscoord(image)
+            elif modemask & MODE.validated and 'GPSStatus' in image and matches:
+                match = gpscoord(image)
             elif modemask & MODE.gps and 'GPSStatus' in image:
                 match = gpscoord(image)
             elif modemask & MODE.projected and 'projlat' in image:
@@ -57,16 +60,106 @@ class KMLPaths(object):
         else:
             return ''
 
-    def KML(self, name, modemask):
-        E = objectify.ElementMaker(annotate=False,
-                                   namespace="http://www.opengis.net/kml/2.2",
-                                   nsmap={None : "http://www.opengis.net/kml/2.2"})
+    @staticmethod
+    def KMLBuilder():
+        return (objectify.ElementMaker(annotate=False,
+                                       namespace="http://www.opengis.net/kml/2.2",
+                                       nsmap={None : "http://www.opengis.net/kml/2.2",
+                                              'gx' : "http://www.google.com/kml/ext/2.2"}),
+                objectify.ElementMaker(annotate=False,
+                                       namespace="http://www.google.com/kml/ext/2.2",
+                                       nsmap={None : "http://www.google.com/kml/ext/2.2"}))
+
+    def KMLPath(self, name, modemask):
+        E, _ = self.KMLBuilder()
         return E.kml(E.Document(E.Placemark(
             E.name(name),
             E.LineString(
-                E.extrude("0"),
-                E.tesselate("0"),
+                E.extrude(0),
+                E.tesselate(0),
                 E.altitudeMode("clampToGround"),
                 E.coordinates(self.coordinateString(modemask))
             )
         )))
+
+    def KMLPaths(self, name):
+        E, G = self.KMLBuilder()
+        return E.kml(E.Document(
+            E.name(name),
+            E.Style(
+                E.LineStyle(
+                    E.color('7f007f00'), # aabbggrr
+                    E.width(4),
+                    G.outerColor('66ffffff'),
+                    G.outerWidth(0.5),
+                    G.labelVisibility(1)),
+                id='valid',
+            ),
+            E.Style(
+                E.LineStyle(
+                    E.color('2f117f11'), # aabbggrr
+                    E.width(4),
+                    G.outerColor('66ffffff'),
+                    G.outerWidth(0.5),
+                    G.labelVisibility(1)),
+                id='gps',
+            ),
+            E.Style(
+                E.LineStyle(
+                    E.color('7f7f007f'), # aabbggrr
+                    E.width(4),
+                    G.outerColor('66ffffff'),
+                    G.outerWidth(0.5),
+                    G.labelVisibility(1)),
+                id='projected',
+            ),
+            E.Style(
+                E.LineStyle(
+                    E.color('227f0000'), # aabbggrr
+                    E.width(4),
+                    G.outerColor('66ffffff'),
+                    G.outerWidth(0.5),
+                    G.labelVisibility(1)),
+                id='interpolated',
+            ),
+            E.Placemark(
+                E.name(name + ':valid'),
+                E.styleUrl('#valid'),
+                E.LineString(
+                    E.extrude(0),
+                    E.tesselate(0),
+                    E.altitudeMode("clampToGround"),
+                    E.coordinates(self.coordinateString(MODE.valid))
+                )
+            ),
+            E.Placemark(
+                E.name(name + ':gps'),
+                E.styleUrl('#gps'),
+                E.LineString(
+                    E.extrude(0),
+                    E.tesselate(0),
+                    E.altitudeMode("clampToGround"),
+                    E.coordinates(self.coordinateString(MODE.gps))
+                )
+            ),
+            E.Placemark(
+                E.name(name + ':projected'),
+                E.styleUrl('#projected'),
+                E.LineString(
+                    E.extrude(0),
+                    E.tesselate(0),
+                    E.altitudeMode("clampToGround"),
+                    E.coordinates(self.coordinateString(MODE.projected))
+                )
+            ),
+            E.Placemark(
+                E.name(name + ':interpolated'),
+                E.styleUrl('#interpolated'),
+                E.LineString(
+                    E.extrude(0),
+                    E.tesselate(0),
+                    E.altitudeMode("clampToGround"),
+                    E.coordinates(self.coordinateString(MODE.interpolated))
+                )
+            )
+        ))

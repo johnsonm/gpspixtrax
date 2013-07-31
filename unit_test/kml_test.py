@@ -34,6 +34,10 @@ class Test_KMLPaths(unittest.TestCase):
         for i in range(len(coordinates)-1):
             self.assertNotEqual(coordinates[i], coordinates[i+1])
 
+    def test_empty(self):
+        K = kml.KMLPaths([])
+        self.assertEquals(K.coordinateString(kml.MODE.valid), '')
+
     @mock.patch('gpspixtrax.exiftool.invoke_exiftool')
     def test_all(self, I):
         directory = os.path.dirname(__file__)
@@ -45,19 +49,23 @@ class Test_KMLPaths(unittest.TestCase):
         G.parse()
         for slice in imagedata:
             K = kml.KMLPaths(slice)
-            k = K.KML('foo', kml.MODE.valid)
+            k = K.KMLPath('foo', kml.MODE.valid)
             self.assert_no_repeats(k)
-            k = K.KML('foo', kml.MODE.gps)
+            k = K.KMLPath('foo', kml.MODE.validated)
             self.assert_no_repeats(k)
-            k = K.KML('foo', kml.MODE.projected)
+            k = K.KMLPath('foo', kml.MODE.gps)
             self.assert_no_repeats(k)
-            k = K.KML('foo', kml.MODE.interpolated)
+            k = K.KMLPath('foo', kml.MODE.projected)
             self.assert_no_repeats(k)
-            k = K.KML('foo', kml.MODE.valid & kml.MODE.projected)
+            k = K.KMLPath('foo', kml.MODE.interpolated)
             self.assert_no_repeats(k)
-            k = K.KML('foo', kml.MODE.valid & kml.MODE.interpolated)
+            k = K.KMLPath('foo', kml.MODE.valid & kml.MODE.projected)
             self.assert_no_repeats(k)
-            k = K.KML('foo', kml.MODE.gps & kml.MODE.projected)
+            k = K.KMLPath('foo', kml.MODE.valid & kml.MODE.interpolated)
             self.assert_no_repeats(k)
-            k = K.KML('foo', kml.MODE.gps & kml.MODE.interpolated)
+            k = K.KMLPath('foo', kml.MODE.gps & kml.MODE.projected)
+            self.assert_no_repeats(k)
+            k = K.KMLPath('foo', kml.MODE.gps & kml.MODE.interpolated)
+            self.assert_no_repeats(k)
+            k = K.KMLPaths('foo')
             self.assert_no_repeats(k)
